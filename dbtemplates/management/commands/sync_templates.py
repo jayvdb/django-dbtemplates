@@ -35,6 +35,10 @@ class Command(BaseCommand):
             action="store_true", dest="force", default=False,
             help="overwrite existing database templates")
         parser.add_argument(
+            "--no-input",
+            action="store_true", dest="no_input", default=False,
+            help="Do not ask or force")
+        parser.add_argument(
             "-o", "--overwrite",
             action="store", dest="overwrite", default='0',
             help="'0' - ask always, '1' - overwrite database "
@@ -53,6 +57,7 @@ class Command(BaseCommand):
     def handle(self, **options):
         extension = options.get('ext')
         force = options.get('force')
+        no_input = options.get('no_input')
         overwrite = options.get('overwrite')
         app_first = options.get('app_first')
         delete = options.get('delete')
@@ -83,27 +88,38 @@ class Command(BaseCommand):
                     try:
                         t = Template.on_site.get(name__exact=name)
                     except Template.DoesNotExist:
-                        if not force:
+                        if no_input or force:
+                             print("\nA '%s' template doesn't exist in the "
+                                "database." % (name))
+                        elif not force:
                             confirm = input(
                                 "\nA '%s' template doesn't exist in the "
                                 "database.\nCreate it with '%s'?"
                                 " (y/[n]): """ % (name, path))
-                        if force or confirm.lower().startswith('y'):
+                        if no_input or force or confirm.lower().startswith('y'):
                             with io.open(path, encoding='utf-8') as f:
                                 t = Template(name=name, content=f.read())
                             t.save()
                             t.sites.add(site)
                     else:
                         while 1:
-                            if overwrite == ALWAYS_ASK:
+                            if no_input or overwrite != ALWAYS_ASK:
+                                print("\n%(template)s exists in the database.\n" %
+                                    {'template': t.__repr__())
+                                # Detect identical
+                                if no_input:
+                                    break
+                                # TODO: Print what will happen
+                                confirm = overwrite
+                                # TODO: Add timestamp comparison
+                            elif overwrite == ALWAYS_ASK:
                                 confirm = input(
                                     "\n%(template)s exists in the database.\n"
                                     "(1) Overwrite %(template)s with '%(path)s'\n"
                                     "(2) Overwrite '%(path)s' with %(template)s\n"
                                     "Type 1 or 2 or press <Enter> to skip: " %
                                     {'template': t.__repr__(), 'path': path})
-                            else:
-                                confirm = overwrite
+
                             if confirm in ('', FILES_TO_DATABASE,
                                            DATABASE_TO_FILES):
                                 if confirm == FILES_TO_DATABASE:
